@@ -70,7 +70,7 @@ export const LoginPage: React.FC = () => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Admin username"
+              placeholder="Admin email"
               fullWidth
               icon={<User className="h-5 w-5 text-gray-400" />}
             />
