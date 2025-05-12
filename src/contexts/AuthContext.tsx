@@ -1,5 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiService } from '../api/apiService';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+
+
+//Replace with your Firebase project configuration
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_API_KEY,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_PROJECT_ID
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -27,35 +40,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+
 
   useEffect(() => {
-    // Check if user is already logged in from localStorage
-    const checkAuth = () => {
-      const storedAuth = localStorage.getItem('isAuthenticated');
-      if (storedAuth === 'true') {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsLoading(true);
+      if (user) {
         setIsAuthenticated(true);
+        setUser(user);
+        // You might want to store the user in local storage or a state management tool
+      } else {
+        setIsAuthenticated(false);
+        setUser(null);
       }
       setIsLoading(false);
-    };
-    
-    checkAuth();
+    });
+
+    // Clean up the subscription on unmount
+    return () => unsubscribe();
   }, []);
 
-  const login = async (username: string, password: string) => {
+  const login = async (email: string, password: string) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const response = await apiService.login({ username, password });
-      
-      if (response.success) {
-        setIsAuthenticated(true);
-        localStorage.setItem('isAuthenticated', 'true');
-      } else {
-        throw new Error('Login failed');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setIsAuthenticated(true);
+      setUser(userCredential.user);
+      // No need to manually set localStorage here as onAuthStateChanged will handle it
+    } catch (err: any) {
+      setError(err.message);
+      setIsAuthenticated(false);
+      setUser(null);
       throw err;
     } finally {
       setIsLoading(false);
@@ -64,14 +82,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     setIsLoading(true);
-    
+    setError(null);
+
     try {
-      await apiService.logout();
-    } catch (err) {
-      console.error('Logout error:', err);
-    } finally {
+      await signOut(auth);
       setIsAuthenticated(false);
-      localStorage.removeItem('isAuthenticated');
+      setUser(null);
+      // No need to manually remove from localStorage as onAuthStateChanged will handle it
+    } catch (err: any) {
+      console.error('Logout error:', err.message);
+      setError(err.message);
+      throw err;
+    } finally {
       setIsLoading(false);
     }
   };
@@ -80,6 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated,
     isLoading,
     error,
+    user,
     login,
     logout,
   };
